@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SANGRE DE SOL | The High Desert Shrine</title>
+    
+    <!-- FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&family=Syncopate:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- STYLES -->
+    <style>
+        :root {
+            --blood-red: #4a0404;
+            --gold: #D4AF37;
+            --ivory: #F2F0E6;
+            --void: #050505;
+            --charcoal: #111111;
+            --text-light: #e6e2dd;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            cursor: none;
+        }
+
+        body {
+            background-color: var(--void);
+            color: var(--text-light);
+            font-family: 'Playfair Display', serif;
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* --- WEBGL & FIXED LAYERS --- */
+        #gl-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            opacity: 1; 
+            pointer-events: none;
+        }
+
+        .grain-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+            z-index: 9000;
+            pointer-events: none;
+            mix-blend-mode: overlay;
+        }
+
+        /* --- CURSOR (FIXED INITIAL STATE) --- */
+        .cursor-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--gold);
+            position: fixed;
+            border-radius: 50%;
+            z-index: 10000;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            top: 0;
+            left: 0;
+            opacity: 0; 
+            visibility: hidden; /* HARD KILL to prevent 0,0 glitch */
+        }
+        .cursor-circle {
+            width: 40px;
+            height: 40px;
+            border: 1px solid rgba(212, 175, 55, 0.5);
+            position: fixed;
+            border-radius: 50%;
+            z-index: 10000;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: width 0.3s, height 0.3s, background-color 0.3s;
+            top: 0;
+            left: 0;
+            opacity: 0; 
+            visibility: hidden; /* HARD KILL to prevent 0,0 glitch */
+        }
+        .cursor-circle.active {
+            width: 80px;
+            height: 80px;
+            background-color: rgba(212, 175, 55, 0.1);
+            border-color: var(--gold);
+            mix-blend-mode: difference;
+        }
+
+        /* --- NAV (HIDDEN INITIALLY) --- */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 30px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            mix-blend-mode: exclusion;
+            
+            /* HIDE NAV INITIALLY TO PREVENT DOUBLE HEADER */
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        .nav-logo {
+            font-family: 'Syncopate', sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--gold);
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px; /* Spacing between icon and text */
+        }
+
+        .logo-mark {
+            width: 18px;
+            height: 18px;
+            fill: var(--gold);
+            transition: transform 0.8s ease;
+        }
+
+        .nav-logo:hover .logo-mark {
+            transform: rotate(90deg);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 40px;
+            font-family: 'Syncopate', sans-serif;
+            font-size: 10px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+        
+        .nav-item {
+            position: relative;
+            padding-bottom: 5px;
+            cursor: pointer;
+        }
+        .nav-item::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--gold);
+            transition: width 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+        }
+        .nav-item:hover::after { width: 100%; }
+
+        /* --- TYPOGRAPHY UTIL --- */
+        .sync { font-family: 'Syncopate', sans-serif; text-transform: uppercase; }
+        .serif { font-family: 'Playfair Display', serif; }
+        .gold { color: var(--gold); }
+        .italic { font-style: italic; }
+
+        /* --- SECTIONS --- */
+        section {
+            position: relative;
+            width: 100%;
+        }
+
+        /* HERO */
+        .hero {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 0 50px 80px 50px;
+        }
+
+        .hero-title {
+            font-size: 13vw;
+            line-height: 0.8;
+            color: var(--text-light); 
+            -webkit-text-stroke: 1px rgba(255, 255, 240, 0.8);
+            text-shadow: 
+                0 0 10px rgba(255, 255, 240, 0.3),
+                0 0 20px rgba(212, 175, 55, 0.2); 
+            opacity: 1;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .hero-title span {
+            display: block;
+        }
+
+        .hero-sub {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 40px;
+            border-top: 1px solid rgba(255,255,255,0.4);
+            padding-top: 20px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* PHILOSOPHY */
+        .philosophy {
+            padding: 15vh 10vw;
+            background: rgba(5,5,5,0.7);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #222;
+        }
+
+        .phil-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5vw;
+        }
+
+        .phil-headline {
+            font-size: 4vw;
+            line-height: 1.1;
+        }
+
+        .phil-text {
+            font-family: 'Syncopate', sans-serif;
+            font-size: 11px;
+            line-height: 2;
+            color: #aaa;
+            align-self: end;
+            max-width: 400px;
+        }
+
+        /* MENU / SELECTION */
+        .selection {
+            padding: 10vh 5vw;
+            background: var(--void);
+            position: relative;
+            z-index: 2;
+        }
+
+        .menu-category {
+            margin-bottom: 15vh;
+            scroll-margin-top: 10vh; /* Smooth scroll offset */
+        }
+
+        .section-header {
+            font-family: 'Syncopate', sans-serif;
+            font-size: 14px;
+            letter-spacing: 0.3em;
+            color: var(--gold);
+            margin-bottom: 5vh;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .section-header::after {
+            content:'';
+            height: 1px;
+            flex-grow: 1;
+            background: linear-gradient(90deg, var(--gold), transparent);
+        }
+
+        .drink-item {
+            padding: 3.5vh 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+            position: relative;
+        }
+        .drink-item:first-child { border-top: 1px solid rgba(255,255,255,0.1); }
+        
+        .drink-item:hover { 
+            padding-left: 2vw; 
+            padding-right: 2vw; 
+            background: rgba(212, 175, 55, 0.05); 
+            border-color: rgba(212, 175, 55, 0.5);
+        }
+
+        .d-info { display: flex; flex-direction: column; }
+        
+        .d-name { 
+            font-size: 3.5vw; 
+            transition: color 0.3s; 
+            font-weight: 400;
+        }
+        .drink-item:hover .d-name { 
+            color: var(--gold); 
+            font-style: italic; 
+            text-shadow: 0 0 10px rgba(212,175,55,0.3);
+        }
+        
+        .d-ingred { 
+            display: block; 
+            font-family: 'Syncopate'; 
+            font-size: 10px; 
+            color: #666; 
+            margin-top: 8px; 
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+        .drink-item:hover .d-ingred { color: #aaa; }
+
+        .d-details { text-align: right; }
+        .d-price { font-family: 'Syncopate'; font-size: 12px; color: var(--text-light); }
+
+        /* HORIZONTAL SCROLL (GALLERY) */
+        .gallery-wrap {
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+            background: var(--void);
+            display: flex;
+            align-items: center;
+            border-top: 1px solid #222;
+        }
+        
+        .gallery-track {
+            display: flex;
+            gap: 5vw;
+            padding: 0 10vw;
+            width: max-content;
+        }
+
+        .gallery-img {
+            width: 30vw;
+            height: 45vw;
+            object-fit: cover;
+            filter: grayscale(100%) contrast(110%) brightness(0.8);
+            transition: filter 0.5s ease;
+            background: #111; /* Fallback for loading */
+        }
+        .gallery-img:hover { filter: grayscale(0%) contrast(100%) brightness(1); }
+        
+        .quote-block {
+            width: 30vw;
+            display: flex;
+            align-items: center;
+            font-size: 2.5vw;
+            line-height: 1.2;
+            color: var(--ivory);
+            font-style: italic;
+        }
+
+        /* RESERVATION - REFINED PRO SCALE */
+        .reservation {
+            height: auto; /* Allow content to dictate, padded heavily */
+            padding: 120px 0; /* Pro-tier spacing: Elegant verticality */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #050505;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            scroll-margin-top: 0;
+            position: relative;
+            z-index: 5;
+        }
+
+        .res-label {
+            margin-bottom: 30px; /* Tighter association */
+            opacity: 0.6;
+            font-size: 10px;
+            letter-spacing: 0.3em;
+        }
+
+        .res-title {
+            font-size: 4vw; /* Sophisticated scale, not shouting */
+            line-height: 1.1;
+            margin-bottom: 0;
+            color: var(--text-light);
+            letter-spacing: -0.01em; 
+            max-width: 60vw;
+        }
+
+        .res-btn {
+            background: rgba(212, 175, 55, 0.05);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            color: var(--gold);
+            padding: 18px 50px; /* Refined button size */
+            font-family: 'Syncopate';
+            font-size: 11px;
+            letter-spacing: 2px;
+            transition: all 0.4s cubic-bezier(0.215, 0.610, 0.355, 1);
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            margin-top: 50px; 
+            backdrop-filter: blur(5px);
+        }
+        .res-btn:hover { 
+            background: var(--gold); 
+            color: #000; 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(212,175,55,0.2); 
+        }
+
+        /* PRO FOOTER ARCHITECTURE - REFINED */
+        footer {
+            background: linear-gradient(180deg, #080808 0%, #000 100%);
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid rgba(212, 175, 55, 0.1); 
+            position: relative;
+            z-index: 5;
+        }
+
+        .footer-hero {
+            padding: 80px 5vw 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .f-address {
+            font-family: 'Playfair Display', serif;
+            font-style: italic;
+            font-size: 18px; /* Discrete, high-end sizing */
+            color: #999;
+            line-height: 1.5;
+            margin-bottom: 1.5rem;
+        }
+        .f-address span { color: var(--gold); opacity: 0.8; }
+
+        .f-hours {
+            font-family: 'Syncopate', sans-serif;
+            font-size: 10px;
+            letter-spacing: 0.2em;
+            color: #444;
+            text-transform: uppercase;
+        }
+
+        .footer-bar {
+            background: #000;
+            padding: 20px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid #111;
+        }
+
+        .f-legal {
+            font-family: 'Syncopate', sans-serif;
+            font-size: 9px;
+            color: #222;
+            letter-spacing: 0.1em;
+        }
+
+        .f-socials {
+            display: flex;
+            gap: 40px;
+        }
+
+        .social-icon {
+            width: 18px; /* Smaller icons for elegance */
+            height: 18px;
+            fill: #333;
+            transition: fill 0.3s ease;
+        }
+        .social-icon:hover { fill: var(--gold); }
+
+        /* MOBILE RESPONSIVE */
+        @media (max-width: 768px) {
+            .hero-title { font-size: 18vw; }
+            .res-title { font-size: 8vw; }
+            .f-address { font-size: 16px; }
+            .footer-bar { flex-direction: column-reverse; gap: 30px; padding-bottom: 40px; }
+            .gallery-track { padding: 0 5vw; }
+            .gallery-img { width: 70vw; height: 90vw; }
+            .quote-block { width: 70vw; font-size: 6vw; }
+            .res-btn { padding: 16px 40px; width: auto; }
+            nav { padding: 20px; }
+            .nav-links { display: none; } 
+        }
+
+        /* PRELOADER */
+        .preloader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            z-index: 99999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .loader-line {
+            width: 0;
+            height: 1px;
+            background: var(--gold);
+            margin-top: 20px;
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- OVERLAYS -->
+    <div class="grain-overlay"></div>
+    <div class="cursor-dot"></div>
+    <div class="cursor-circle"></div>
+
+    <!-- PRELOADER -->
+    <div class="preloader">
+        <div class="sync gold" style="letter-spacing: 5px;">SANGRE DE SOL</div>
+        <div class="loader-line"></div>
+    </div>
+
+    <!-- WEBGL BACKGROUND -->
+    <div id="gl-container"></div>
+
+    <!-- NAV -->
+    <nav>
+        <div class="nav-logo" data-target="top">
+            <!-- ADDED LOGO MARK (SUN ICON) -->
+            <svg class="logo-mark" viewBox="0 0 24 24">
+                <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+            </svg>
+            SANGRE DE SOL
+        </div>
+        <div class="nav-links">
+            <div class="nav-item" data-target="#philosophy">Philosophy</div>
+            <div class="nav-item" data-target="#altar">Altar</div>
+            <div class="nav-item" data-target="#provisions">Provisions</div>
+            <div class="nav-item gold" data-target="#reserve">Reserve</div>
+        </div>
+    </nav>
+
+    <!-- CONTENT WRAPPER (Smooth Scroll) -->
+    <div id="smooth-wrapper">
+        <div id="smooth-content">
+
+            <!-- HERO -->
+            <section class="hero">
+                <h1 class="hero-title">
+                    <span class="word-reveal">LIQUID</span>
+                    <span class="word-reveal italic">SACRAMENT</span>
+                </h1>
+                <div class="hero-sub">
+                    <div class="sync gold" style="font-size:10px;">EST. 2026 / PHOENIX</div>
+                    <div class="sync" style="font-size:10px;">SCROLL TO ENTER</div>
+                </div>
+            </section>
+
+            <!-- PHILOSOPHY -->
+            <section class="philosophy" id="philosophy">
+                <div class="phil-grid">
+                    <div class="phil-headline">
+                        <span class="gold italic">Mezcal</span> is not a drink.<br>
+                        It is a conversation with the <span class="italic">dead</span>.
+                    </div>
+                    <div class="phil-text">
+                        We curate rare agave spirits from the most remote palenques in Oaxaca. 
+                        No industrial processes. No shortcuts. Just earth, fire, time, and the 
+                        hands of the Maestro Mezcalero. Welcome to the shrine.
+                    </div>
+                </div>
+            </section>
+
+            <!-- MENU -->
+            <section class="selection">
+                
+                <!-- COCKTAILS -->
+                <div class="menu-category" id="altar">
+                    <div class="section-header">THE ALTAR (SIGNATURES)</div>
+                    <div class="drink-list">
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">The Oaxacan</div>
+                                <div class="d-ingred">Espadin / Ancho Reyes / Copal Smoke / Orange Oil</div>
+                            </div>
+                            <div class="d-details d-price">$24</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1470337458703-46ad1756a187?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Gold Dust</div>
+                                <div class="d-ingred">Sotol / Raw Honey / Burnt Thyme / Bee Pollen Rim</div>
+                            </div>
+                            <div class="d-details d-price">$28</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1556679343-c7306c1976bc?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Blood Moon</div>
+                                <div class="d-ingred">Hibiscus Infusion / Reposado / Black Lava Salt</div>
+                            </div>
+                            <div class="d-details d-price">$22</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1504502350617-c2f58b4392d6?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Velvet Heat</div>
+                                <div class="d-ingred">Ghost Pepper Tequila / Mole Bitters / Agave Nectar</div>
+                            </div>
+                            <div class="d-details d-price">$26</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FLIGHTS -->
+                <div class="menu-category">
+                    <div class="section-header">THE SOURCE (FLIGHTS)</div>
+                    <div class="drink-list">
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1516709315038-c53ce87e8705?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Espadin Vertical</div>
+                                <div class="d-ingred">Three expressions of the King of Agaves. High altitudes.</div>
+                            </div>
+                            <div class="d-details d-price">$45</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1585507567399-56d11b333487?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Wild Agave Hunter</div>
+                                <div class="d-ingred">Tobala / Tepeztate / Cuixe. The rarest wild harvests.</div>
+                            </div>
+                            <div class="d-details d-price">$65</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1574056254054-c92338c237f8?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Pechuga Ceremonial</div>
+                                <div class="d-ingred">Distilled with seasonal fruits and raw poultry breast. Rare.</div>
+                            </div>
+                            <div class="d-details d-price">MKT</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FOOD -->
+                <div class="menu-category" id="provisions" style="margin-bottom: 0;">
+                    <div class="section-header">SUSTENANCE (PROVISIONS)</div>
+                    <div class="drink-list">
+                        <!-- Verified Food Image -->
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1559339352-11d035aa65de?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Aguachile Negro</div>
+                                <div class="d-ingred">Blue Prawn / Burnt Habanero Salsa / Cucumber / Ash</div>
+                            </div>
+                            <div class="d-details d-price">$24</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1599974579688-8dbdd335c77f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Bone Marrow Elote</div>
+                                <div class="d-ingred">Roasted Bone Marrow / Sweet Corn / Cotija / Lime</div>
+                            </div>
+                            <div class="d-details d-price">$21</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1504674900247-0877df9cc836?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Duck Carnitas</div>
+                                <div class="d-ingred">Confit Duck Leg / Heirloom Blue Corn / Salsa Macha</div>
+                            </div>
+                            <div class="d-details d-price">$32</div>
+                        </div>
+                        <div class="drink-item" data-img="https://images.unsplash.com/photo-1626074353765-517a681e40be?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80">
+                            <div class="d-info">
+                                <div class="d-name">Oaxacan Chocolate</div>
+                                <div class="d-ingred">Stone Ground Cacao / Chili Oil / Sea Salt</div>
+                            </div>
+                            <div class="d-details d-price">$14</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- HORIZONTAL GALLERY -->
+            <section class="gallery-wrap">
+                <div class="gallery-track">
+                    <div class="quote-block">
+                        "The desert does not forgive,<br>but it does remember."
+                    </div>
+                    <!-- Architecture / Desert Mood (Keep as is) -->
+                    <img src="https://images.unsplash.com/photo-1451976426598-a7593bd6d0b2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" class="gallery-img" alt="Desert Night">
+                    <!-- Option 3: Blue agave plants hillside (Verified Fix) -->
+                    <img src="https://images.unsplash.com/photo-1556679343-c7306c1976bc?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" class="gallery-img" alt="Agave">
+                    <!-- Dark Interior / Bottle (Keep as is) -->
+                    <img src="https://images.unsplash.com/photo-1572116469696-31de0f17cc34?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" class="gallery-img" alt="Shadows">
+                    <!-- Fire/Cooking (Keep as is) -->
+                    <img src="https://images.unsplash.com/photo-1513623935135-c896b59073c1?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" class="gallery-img" alt="Fire">
+                    
+                    <div class="quote-block" style="font-size:2vw; width:30vw;">
+                        <span class="sync" style="font-size:12px; color:#666;">INTERIOR BY STUDIO OCHO</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RESERVATION UPGRADE -->
+            <section class="reservation" id="reserve">
+                <div class="sync gold res-label">ACCESS</div>
+                <h2 class="res-title italic">Claim Your Seat<br>At The Fire</h2>
+                <button class="res-btn">Reserve Table</button>
+            </section>
+
+            <!-- FOOTER UPGRADE -->
+            <footer>
+                <div class="footer-hero">
+                    <div class="f-address">
+                        4420 N. Camelback Rd<br>
+                        <span>Phoenix</span>, AZ 85018
+                    </div>
+                    <div class="f-hours">Wed — Sun / 6pm — 2am</div>
+                </div>
+                
+                <div class="footer-bar">
+                    <div class="f-legal">© 2026 SANGRE DE SOL</div>
+                    <div class="f-socials">
+                        <!-- Instagram SVG -->
+                        <a href="#"><svg class="social-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+                        <!-- Generic Resy/Calendar SVG -->
+                        <a href="#"><svg class="social-icon" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5z"/></svg></a>
+                    </div>
+                </div>
+            </footer>
+
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.29/bundled/lenis.min.js"></script>
+
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+        // --- 1. CURSOR LOGIC ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorCircle = document.querySelector('.cursor-circle');
+        let hasMoved = false;
+
+        window.addEventListener('mousemove', (e) => {
+            // First time move: fade in the cursor
+            if (!hasMoved) {
+                // Ensure visibility is 'visible' before animating opacity
+                cursorDot.style.visibility = "visible";
+                cursorCircle.style.visibility = "visible";
+                
+                gsap.to([cursorDot, cursorCircle], { opacity: 1, duration: 0.5 });
+                hasMoved = true;
+            }
+
+            gsap.to(cursorDot, { x: e.clientX, y: e.clientY, duration: 0.1 });
+            gsap.to(cursorCircle, { x: e.clientX, y: e.clientY, duration: 0.3, ease: 'power2.out' });
+        });
+
+        // Hover Effects
+        document.querySelectorAll('a, button, .drink-item, .nav-item').forEach(el => {
+            el.addEventListener('mouseenter', () => cursorCircle.classList.add('active'));
+            el.addEventListener('mouseleave', () => cursorCircle.classList.remove('active'));
+        });
+
+        // --- 2. LENIS SCROLL ---
+        const lenis = new Lenis({
+            duration: 1.2,
+            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+            direction: 'vertical',
+            smooth: true
+        });
+
+        function raf(time) {
+            lenis.raf(time);
+            requestAnimationFrame(raf);
+        }
+        requestAnimationFrame(raf);
+
+        // Connect Lenis to ScrollTrigger
+        lenis.on('scroll', ScrollTrigger.update);
+        gsap.ticker.add((time) => {
+            lenis.raf(time * 1000);
+        });
+
+        // --- NAVIGATION CLICK HANDLERS ---
+        document.querySelectorAll('.nav-item, .nav-logo').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const targetId = item.getAttribute('data-target');
+                if (targetId === 'top') {
+                    lenis.scrollTo(0);
+                } else if (targetId) {
+                    lenis.scrollTo(targetId, {
+                        offset: -50 // small offset for header room
+                    });
+                }
+            });
+        });
+
+        // --- 3. THREE.JS FLUID SHADER ---
+        const container = document.getElementById('gl-container');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const renderer = new THREE.WebGLRenderer({ alpha: true });
+        renderer.setSize(width, height);
+        container.appendChild(renderer.domElement);
+
+        const loader = new THREE.TextureLoader();
+        loader.crossOrigin = "";
+        
+        // --- HERO TEXTURE REVERTED AS COMMANDED ---
+        // Reverted to Abstract Gold/Black Oil (photo-1618005182384)
+        const texture = loader.load('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80');
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uMouse: { value: new THREE.Vector2(0, 0) },
+                uResolution: { value: new THREE.Vector2(width, height) },
+                uTexture: { value: texture },
+                uScroll: { value: 0 },
+                uHoverIntensity: { value: 0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform vec2 uMouse;
+                uniform vec2 uResolution;
+                uniform sampler2D uTexture;
+                uniform float uScroll;
+                uniform float uHoverIntensity;
+                varying vec2 vUv;
+
+                void main() {
+                    vec2 uv = vUv;
+                    
+                    // Ripple Logic
+                    vec2 mouse = uMouse * 0.5 + 0.5;
+                    float dist = distance(uv, mouse);
+                    float decay = smoothstep(0.6, 0.0, dist);
+                    
+                    // Slower, heavier waves
+                    float wave = sin(dist * 15.0 - uTime * 1.5) * 0.015 * decay;
+                    float liquid = sin(uv.y * 8.0 + uTime * 0.5) * 0.005;
+                    
+                    vec2 distortedUv = uv + vec2(wave + liquid, wave);
+                    vec4 color = texture2D(uTexture, distortedUv);
+
+                    // STRICT COLOR GRADING: Force everything to Black/Red/Gold
+                    
+                    // 1. Greyscale the base
+                    float grey = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+                    
+                    // 2. Map Grey to Palette
+                    // Dark areas -> Black
+                    // Midtones -> Deep Red
+                    vec3 palette = mix(vec3(0.02), vec3(0.3, 0.02, 0.02), grey * 0.8);
+                    
+                    // 3. Add Gold Highlights based on brightness & wave peaks
+                    // If pixel is bright OR wave is high
+                    float highlight = smoothstep(0.6, 1.0, grey) + (wave * 20.0);
+                    palette += vec3(0.83, 0.68, 0.21) * highlight * 0.5;
+
+                    // 4. Darken with scroll
+                    float darkness = 0.2 + (uScroll * 2.0);
+                    palette = mix(palette, vec3(0.0), min(darkness, 0.95));
+
+                    gl_FragColor = vec4(palette, 1.0);
+                }
+            `
+        });
+
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+        scene.add(plane);
+
+        // Loop
+        let mouse = new THREE.Vector2();
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / width) * 2 - 1;
+            mouse.y = -(e.clientY / height) * 2 + 1;
+            gsap.to(material.uniforms.uMouse.value, {
+                x: mouse.x,
+                y: mouse.y,
+                duration: 1
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            renderer.setSize(width, height);
+            material.uniforms.uResolution.value.set(width, height);
+        });
+
+        function animate() {
+            material.uniforms.uTime.value += 0.015; // Slightly slower time
+            // Map scroll position to shader
+            material.uniforms.uScroll.value = window.scrollY / 2000;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // --- 4. SCROLL ANIMATIONS (GSAP) ---
+
+        // Hero Reveal
+        const tl = gsap.timeline();
+        tl.to('.loader-line', { width: '100%', duration: 1.5, ease: 'power2.inOut' })
+          .to('.preloader', { y: '-100%', duration: 1, ease: 'expo.inOut' })
+          // ANIMATE NAV IN AFTER PRELOADER IS GONE
+          .to('nav', { opacity: 1, y: 0, duration: 1, ease: 'power2.out' }, "-=0.2")
+          .from('.hero-title span', { y: 150, stagger: 0.1, duration: 1.5, ease: 'power4.out' }, "-=0.5")
+          .from('.hero-sub', { opacity: 0, duration: 1 }, "-=1");
+
+        // Philosophy Parallax
+        gsap.to('.philosophy', {
+            background: 'rgba(5,5,5,1)',
+            scrollTrigger: {
+                trigger: '.philosophy',
+                start: 'top center',
+                end: 'bottom center',
+                scrub: true
+            }
+        });
+
+        // Horizontal Scroll Gallery
+        const galleryTrack = document.querySelector('.gallery-track');
+        gsap.to(galleryTrack, {
+            x: () => -(galleryTrack.scrollWidth - window.innerWidth),
+            ease: "none",
+            scrollTrigger: {
+                trigger: ".gallery-wrap",
+                start: "top top",
+                end: () => "+=" + galleryTrack.scrollWidth,
+                pin: true,
+                scrub: 1, /* Smooth Scrub added */
+                anticipatePin: 1, /* Reduce frustration by anticipating the pin */
+                invalidateOnRefresh: true
+            }
+        });
+
+        // Drink/Food Item Image Swap on Hover
+        const drinkItems = document.querySelectorAll('.drink-item');
+        drinkItems.forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                const img = item.getAttribute('data-img');
+                if(img) {
+                    // Load new texture into WebGL
+                    new THREE.TextureLoader().load(img, (tex) => {
+                        gsap.to(material.uniforms.uHoverIntensity, { value: 1, duration: 0.5 });
+                        material.uniforms.uTexture.value = tex;
+                    });
+                }
+            });
+        });
+
+    </script>
+</body>
+</html>
